@@ -27,7 +27,7 @@ def fetch(user: str) -> None:
     try:
         try:
             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            Path(f"tmp/{user}/{now}").mkdir(exist_ok=True, parents=True)
+            Path(f"{TOP_DIR}/tmp/{user}/{now}").mkdir(exist_ok=True, parents=True)
 
             c = twint.Config()
             c.Username = user
@@ -35,7 +35,7 @@ def fetch(user: str) -> None:
             c.Following = True
             # c.Hide_output = True
             c.Store_json = True
-            c.Output = f"tmp/{user}/{now}"
+            c.Output = f"{TOP_DIR}/tmp/{user}/{now}"
             twint.run.Favorites(c)
             print(f"finish {user}.")
         except Exception as exc:
@@ -43,15 +43,6 @@ def fetch(user: str) -> None:
             print(log)
     except Exception as exc:
         print(exc)
-
-
-@dataclass
-class File:
-    ts: datetime.datetime
-    filename: str
-
-
-Tweets = NewType("Tweets", List[str])
 
 
 def get_tweets(user: str) -> Tweets:
@@ -67,7 +58,7 @@ def get_tweets(user: str) -> Tweets:
     if target_path is not None:
         files = []
         for target_file in Path(target_path).rglob("*"):
-            """ .gzがファイルの末尾についていることがあり、削除する """
+            """ .gzがファイルの末尾についていることがあり、末尾の文字列を削除する """
             name = re.sub("\.gz$", "", Path(target_file).name)
             fetched_time = datetime.datetime.strptime(name, "%Y-%m-%d %H:%M:%S")
             print(target_file, fetched_time)
