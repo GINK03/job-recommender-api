@@ -16,18 +16,27 @@ TOP_DIR = Path(__file__).resolve().parent.parent
 WORD_SIZE = 7264006
 
 if "--create_transformer" in sys.argv:
-    mtx = lil_matrix((10000, WORD_SIZE))
-    for idx, filename in tqdm(enumerate(glob.glob(f"{TOP_DIR}/var/user_vectors/*")[:10000]), desc="load example users..."):
+    SAMPLE_SIZE = 50000
+    mtx = lil_matrix((SAMPLE_SIZE, WORD_SIZE))
+    def load(arg):
+        idx, filename = arg
         with open(filename, "rb") as fp:
             vec = pickle.loads(gzip.decompress(fp.read()))
-        for term_idx, weight in vec.items():
-            mtx[idx, term_idx] = weight
+        return (idx, vec)
+
+    args = []
+    for idx, filename in tqdm(enumerate(glob.glob(f"{TOP_DIR}/var/user_vectors/*")[:SAMPLE_SIZE]), desc="load example users..."):
+        args.append((idx, filename))
+    with ProcessPoolExecutor(max_workers=16) as exe:
+        for idx, vec in tqdm(exe.map(load, args), total=len(args), desc="load example users..."):
+            for term_idx, weight in vec.items():
+                mtx[idx, term_idx] = weight
 
     print(f"[{FILE}] start to train TruncatedSVD...")
-    transformer = TruncatedSVD(n_components=100, random_state=0)
+    transformer = TruncatedSVD(n_components=200, n_iter=50, random_state=0)
     transformer.fit(mtx)
     print(f"[{FILE}] start to transform matrix...")
-    X_transformed = transformer.transform(mtx)
+    X_transformed = transformer.transform(mtx[:5000])
     print(X_transformed)
     print(X_transformed.shape)
     print(type(X_transformed))
@@ -40,7 +49,7 @@ if "--transform" in sys.argv:
     """ 1000個づつ分割 """
     filenames = glob.glob(f"{TOP_DIR}/var/user_vectors/*")
     args = []
-    STEP = 5000
+    STEP = 2000
     for i in range(0, len(filenames), STEP):
         args.append((i, filenames[i:i+STEP]))
     
@@ -67,6 +76,6 @@ if "--transform" in sys.argv:
         with open(f"{TOP_DIR}/tmp/data/{key:09d}.pkl.gz", "wb") as fp:
             fp.write(gzip.compress(pickle.dumps(data)))
 
-    with ProcessPoolExecutor(max_workers=16) as exe:
+    with ProcessPoolExecutor(max_workers=8) as exe:
         for _ in tqdm(exe.map(load, args), total=len(args), desc="transforming..."):
             _
