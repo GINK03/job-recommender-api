@@ -20,6 +20,7 @@ from concurrent.futures import ProcessPoolExecutor
 import psutil
 from tqdm import tqdm
 from dataclasses import dataclass
+import random
 HOME = E.get("HOME")
 TOP_DIR = Path(__file__).resolve().parent.parent
 FILE = Path(__file__).name
@@ -34,13 +35,13 @@ for target_dir in [f"{HOME}/.mnt/favs{i:02d}" for i in range(20)]:
 # for target_dir in [f"{HOME}/.mnt/favs04"]:
     for user_dir in glob.glob(f"{target_dir}/*"):
         user_dirs.append(user_dir)
-        
+random.shuffle(user_dirs) 
 
 @dataclass
 class IdxFreq:
     idx: int
     freq: float
-idf = pd.read_csv(f"{TOP_DIR}/var/doc_freq.csv")
+idf = pd.read_csv(f"{HOME}/var/doc_freq.csv")
 idf = idf.reset_index()
 """ ヒューリスティック: 10できる """
 idf = idf[idf.freq >= 10]
@@ -49,7 +50,7 @@ idf = {term: IdxFreq(idx, freq) for term, freq, idx in zip(idf.term, idf.freq, i
 def get_vector(user_dir: str) -> Libs.Tweets:
     try:
         screen_name = Path(user_dir).name
-        if Path(f"{TOP_DIR}/var/user_vectors/{screen_name}").exists():
+        if Path(f"{HOME}/var/user_vectors/{screen_name}").exists():
             return None
 
         files = []
@@ -83,6 +84,9 @@ def get_vector(user_dir: str) -> Libs.Tweets:
                         print(f"[{FILE}] tb_lineno = {tb_lineno}, exc = {exc}", file=sys.stderr)
                         continue
         tweets: Libs.Tweets = list(tweets_set)
+        if len(tweets) < 300:
+            print(f"screen_name = {screen_name}'s sample tweets is too small, skip")
+            return
 
 
         parser = MeCab.Tagger("-Owakati -d /usr/lib/x86_64-linux-gnu/mecab/dic/mecab-ipadic-neologd")
@@ -99,14 +103,14 @@ def get_vector(user_dir: str) -> Libs.Tweets:
                 freq = idf[t].freq
                 tfidf[idx] = np.log1p(f)/freq/len(tweets)
         screen_name = Path(user_dir).name
-        with open(f"{TOP_DIR}/var/user_vectors/{screen_name}", "wb") as fp:
+        with open(f"{HOME}/var/user_vectors/{screen_name}", "wb") as fp:
             fp.write(gzip.compress(pickle.dumps(tfidf)))
     except Exception as exc:
         tb_lineno = sys.exc_info()[2].tb_lineno
         print(f"[{FILE}] tb_lineno = {tb_lineno}, exc = {exc}", file=sys.stderr)
 # for user_dir in tqdm(user_dirs):
 #    get_vector(user_dir)
-with ProcessPoolExecutor(max_workers=psutil.cpu_count()) as exe:
+with ProcessPoolExecutor(max_workers=psutil.cpu_count() * 3) as exe:
     for _ in tqdm(exe.map(get_vector, user_dirs), total=len(user_dirs)):
         _
 

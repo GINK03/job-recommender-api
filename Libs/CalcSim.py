@@ -9,9 +9,11 @@ import pickle
 from pathlib import Path
 from typing import Dict
 import pandas as pd
+from os import environ as E
 
+HOME = E.get("HOME")
 TOP_DIR = Path(__file__).resolve().parent.parent
-with open(f"{TOP_DIR}/var/org_tfidf.pkl", "rb") as fp:
+with open(f"{HOME}/var/org_tfidf.pkl", "rb") as fp:
     org_tfidf = pickle.load(fp)
 
 def calc_sim(tfidf_s: Dict[str, float]) -> pd.DataFrame:
