@@ -2,7 +2,7 @@ import numpy as np
 
 import faiss
 
-npz = np.load("../tmp/joined_data.npz")
+npz = np.load("../tmp/joined_data_svd.npz")
 users = npz["users"]
 X = npz["X"].astype(np.float32) 
 X = np.nan_to_num(X)
