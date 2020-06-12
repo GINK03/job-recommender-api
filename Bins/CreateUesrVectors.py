@@ -21,7 +21,8 @@ import psutil
 from tqdm import tqdm
 from dataclasses import dataclass
 import random
-HOME = E.get("HOME")
+
+HOME = Path.home()
 TOP_DIR = Path(__file__).resolve().parent.parent
 FILE = Path(__file__).name
 try:
@@ -31,8 +32,8 @@ except Exception as exc:
     raise Exception(exc)
 
 user_dirs = []
-for target_dir in [f"{HOME}/.mnt/favs{i:02d}" for i in range(20)]:
-# for target_dir in [f"{HOME}/.mnt/favs04"]:
+# for target_dir in [f"{HOME}/.mnt/favs{i:02d}" for i in range(20)]:
+for target_dir in [f"{HOME}/.mnt/favs04"]:
     for user_dir in glob.glob(f"{target_dir}/*"):
         user_dirs.append(user_dir)
 random.shuffle(user_dirs) 
