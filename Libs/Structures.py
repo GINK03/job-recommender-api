@@ -13,6 +13,7 @@ OrgData = NewType("OrgData", Dict[str, Data])
 @dataclass
 class File:
     ts: datetime.datetime
+    typing: str
     filename: str
 
 

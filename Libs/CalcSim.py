@@ -11,11 +11,12 @@ from typing import Dict
 import pandas as pd
 from os import environ as E
 
+"""
 HOME = E.get("HOME")
 TOP_DIR = Path(__file__).resolve().parent.parent
 with open(f"{HOME}/var/org_tfidf.pkl", "rb") as fp:
     org_tfidf = pickle.load(fp)
-
+"""
 def calc_sim(tfidf_s: Dict[str, float]) -> pd.DataFrame:
     """
     入力されたtfidfをもとに、ターゲットとの類似度を計算して降順で返す
