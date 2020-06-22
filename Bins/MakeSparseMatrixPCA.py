@@ -2,7 +2,7 @@ import pickle
 import gzip
 import glob
 from scipy.sparse import lil_matrix
-from sklearn.decomposition import TruncatedSVD
+from sklearn.decomposition import MiniBatchSparsePCA
 # import faiss
 import numpy as np
 from pathlib import Path
@@ -48,8 +48,8 @@ if "--create_transformer" in sys.argv:
                 mtx[idx, term_idx] = weight
 
     print(f"[{FILE}] start to train TruncatedSVD...")
-    transformer = TruncatedSVD(n_components=500, n_iter=10, random_state=0)
-    transformer.fit(mtx)
+    transformer = MiniBatchSparsePCA(n_components=500, batch_size=100, random_state=0)
+    transformer.fit(mtx.todense())
     elapsed_time = time.time() - start_time
     print(f"[{FILE}] elapsed_time = {elapsed_time}")
     print(f"[{FILE}] start to transform matrix...")

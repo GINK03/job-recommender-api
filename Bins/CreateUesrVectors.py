@@ -14,12 +14,16 @@ import re
 from os import environ as E
 from dataclasses import dataclass
 import gzip
+import zlib
 from typing import Set, List, Optional
 from concurrent.futures import ProcessPoolExecutor
 import psutil
 from tqdm import tqdm
 from dataclasses import dataclass
 import random
+import socket
+from loguru import logger
+logger.add(sys.stdout, format="{file} {time} {level} {message} {line}", filter="placeholder", level="DEBUG")
 
 HOME = Path.home()
 TOP_DIR = Path(__file__).resolve().parent.parent
@@ -30,10 +34,13 @@ try:
 except Exception as exc:
     raise Exception(exc)
 
+if socket.gethostname() in {"Akagi"}:
+    target_dirs = [f"{HOME}/nvme0n1"]
+else:
+    target_dirs = [f"{HOME}/.mnt/favs01"]
+
 user_dirs = []
-# for target_dir in [f"{HOME}/.mnt/favs{i:02d}" for i in range(20)]:
-# for target_dir in [f"{HOME}/.mnt/favs04"]:
-for target_dir in [f"{HOME}/nvme0n1"]:
+for target_dir in target_dirs:
     for user_dir in glob.glob(f"{target_dir}/*"):
         user_dirs.append(user_dir)
 random.shuffle(user_dirs) 
@@ -61,7 +68,7 @@ def get_vector(user_dirs: List[str]) -> Libs.Tweets:
                     fetched_time = datetime.datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
                 except ValueError as exc:
                     tb_lineno = sys.exc_info()[2].tb_lineno
-                    print(f"[{FILE}] tb_lineno = {tb_lineno}, exc = {exc}", file=sys.stderr)
+                    logger.debug(f"[{FILE}] tb_lineno = {tb_lineno}, exc_type = {type(exc)}, exc = {exc}")
                     continue
                 if re.search("FEEDS_\d\d\d\d", str(target_file)):
                     feeds_file = Libs.File(ts=fetched_time, typing="FEEDS", filename=target_file)
@@ -73,26 +80,36 @@ def get_vector(user_dirs: List[str]) -> Libs.Tweets:
                 continue
             tweets_set = set()
             with gzip.open(favorites_file.filename, "rt") as fp:
-                for line in fp:
-                    try:
-                        obj = json.loads(line.strip())
-                        tweets_set.add(obj["text"])
-                    except Exception as exc:
-                        tb_lineno = sys.exc_info()[2].tb_lineno
-                        print(f"[{FILE}] tb_lineno = {tb_lineno}, exc = {exc}", file=sys.stderr)
-                        continue
-            # もしtweets_setが300以下だったらそもそも処理しない
-            if len(tweets_set) <= 300:
+                try:
+                    for line in fp:
+                        try:
+                            obj = json.loads(line.strip())
+                            tweets_set.add(obj["text"])
+                        except Exception as exc:
+                            tb_lineno = sys.exc_info()[2].tb_lineno
+                            logger.debug(f"[{FILE}] tb_lineno = {tb_lineno}, exc_type = {type(exc)}, exc = {exc}")
+                            continue
+                except gzip.BadGzipFile:
+                    Path(favorites_file.filename).unlink()
+                except zlib.error:
+                    Path(favorites_file.filename).unlink()
+            # もしtweets_setが100未満だったらそもそも処理しない
+            if len(tweets_set) < 100:
                 continue
             with gzip.open(feeds_file.filename, "rt") as fp:
-                for line in fp:
-                    try:
-                        obj = json.loads(line.strip())
-                        tweets_set.add(obj["text"])
-                    except Exception as exc:
-                        tb_lineno = sys.exc_info()[2].tb_lineno
-                        print(f"[{FILE}] tb_lineno = {tb_lineno}, exc = {exc}", file=sys.stderr)
-                        continue
+                try:
+                    for line in fp:
+                        try:
+                            obj = json.loads(line.strip())
+                            tweets_set.add(obj["text"])
+                        except Exception as exc:
+                            tb_lineno = sys.exc_info()[2].tb_lineno
+                            logger.debug(f"[{FILE}] tb_lineno = {tb_lineno}, exc_type = {type(exc)}, exc = {exc}")
+                            continue
+                except gzip.BadGzipFile:
+                    Path(favorites_file.filename).unlink()
+                except zlib.error:
+                    Path(favorites_file.filename).unlink()
 
             tweets: List[str] = list(tweets_set)
             
@@ -112,7 +129,7 @@ def get_vector(user_dirs: List[str]) -> Libs.Tweets:
                 fp.write(gzip.compress(pickle.dumps(tfidf)))
         except Exception as exc:
             tb_lineno = sys.exc_info()[2].tb_lineno
-            print(f"[{FILE}] tb_lineno = {tb_lineno}, exc = {exc}", file=sys.stderr)
+            logger.debug(f"[{FILE}] tb_lineno = {tb_lineno}, exc_type = {type(exc)}, exc = {exc}")
 
 args = {}
 for idx, user_dir in enumerate(user_dirs):
