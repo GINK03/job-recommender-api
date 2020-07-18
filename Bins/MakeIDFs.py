@@ -25,7 +25,6 @@ assert parser.parse("COVID19").strip().split() == ["COVID19"], "辞書ファイ�
 HOME = Path.home()
 TOP_DIR = Path(__file__).resolve().parent.parent
 
-
 def get_tweets_from_user_dir(sub_dir):
     tweets = set()
     for filename in glob.glob(f"{sub_dir}/FEEDS/*"):
@@ -61,7 +60,7 @@ def get_tweets_from_user_dir(sub_dir):
 
 """ IDF(doc_freq)を作成 """
 doc_freq: Dict[str, int] = {}
-user_dirs = [sub_dir for sub_dir in tqdm(glob.glob(f"{HOME}/nvme0n1/*"), desc="collect tweets for idf-dic")]
+user_dirs = [sub_dir for sub_dir in tqdm(glob.glob(Path("~/.mnt/nfs/favs01/*").expanduser().__str__()), desc="collect tweets for idf-dic")]
 if E.get("TEST"):
     user_dirs = user_dirs[:1000000]
 

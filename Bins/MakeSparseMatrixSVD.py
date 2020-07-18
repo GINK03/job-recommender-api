@@ -14,6 +14,7 @@ import pandas as pd
 from os import environ as E
 import psutil
 import time
+import bz2
 
 HOME = Path.home()
 FILE = Path(__file__).name
@@ -23,30 +24,43 @@ idf = pd.read_csv(f'{TOP_DIR}/var/doc_freq.csv')
 WORD_SIZE = len(idf)
 
 if "--create_transformer" in sys.argv:
-    SAMPLE_SIZE = 10000
+    SAMPLE_SIZE = 100000
     print(f"total word size is = {WORD_SIZE}")
     start_time = time.time() 
-    mtx = lil_matrix((SAMPLE_SIZE, WORD_SIZE))
+
     def load(arg):
-        idx, filename = arg
+        filename = arg
         try:
-            with open(filename, "rb") as fp:
-                vec = pickle.loads(gzip.decompress(fp.read()))
-            return (idx, vec)
+            with bz2.open(filename, "rb") as fp:
+                vec = pickle.load(fp)
+
+            SAMPLE_SIZE = vec["__SAMPLE_SIZE__"]
+            del vec["__SAMPLE_SIZE__"]
+            if SAMPLE_SIZE < 100:
+                return None
+            return (vec)
         except Exception as exc:
-            print(exc, idx, filename)
+            print(exc, filename)
+            Path(filename).unlink()
             return None
     args = []
     for idx, filename in tqdm(enumerate(glob.glob(f"{TOP_DIR}/var/user_vectors/*")[:SAMPLE_SIZE]), desc="load example users..."):
-        args.append((idx, filename))
+        args.append(filename)
+    
+    mtx = lil_matrix((SAMPLE_SIZE, WORD_SIZE))
+    counter = 0
     with ProcessPoolExecutor(max_workers=psutil.cpu_count()) as exe:
         for ret in tqdm(exe.map(load, args), total=len(args), desc="load example users..."):
             if ret is None:
                 continue
-            idx, vec = ret
+            vec = ret
             for term_idx, weight in vec.items():
-                mtx[idx, term_idx] = weight
-
+                mtx[counter, term_idx] = weight
+            counter += 1
+    print(mtx.shape)
+    mtx = mtx[:counter]
+    print(mtx.shape)
+    # exit()
     print(f"[{FILE}] start to train TruncatedSVD...")
     transformer = TruncatedSVD(n_components=500, n_iter=10, random_state=0)
     transformer.fit(mtx)
