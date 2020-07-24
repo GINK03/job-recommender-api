@@ -9,9 +9,12 @@ from pathlib import Path
 from typing import Set, Dict
 from os import environ as E
 import pandas as pd
+import numpy as np
 import glob
 import json
-
+import re
+import regex
+from loguru import logger
 """
 1. tweetを100万集める
 2. 重複を弾くためにSet型で集計する
@@ -29,7 +32,7 @@ def get_tweets_from_user_dir(sub_dir):
     tweets = set()
     for filename in glob.glob(f"{sub_dir}/FEEDS/*"):
         if not Path(filename).is_file():
-            print(filename)
+            logger.info(filename)
             continue
         try:
             with gzip.open(filename, "rt") as fp:
@@ -43,36 +46,68 @@ def get_tweets_from_user_dir(sub_dir):
                         continue
                     try:
                         text = obj["text"]
+                        snow_flake = re.search("/(\d{1,})$", obj["status_url"]).group(1)
                         tweets.add(text)
                     except Exception as exc:
-                        print(exc, obj)
+                        logger.error(f"{exc}, {obj}")
         except Exception as exc:
-            print(exc)
+            logger.error(f"{exc}")
             continue
-    doc_freq = {}
-    for tweet in tweets:
+    return tweets
+
+
+user_dirs = [sub_dir for sub_dir in tqdm(glob.glob(Path("~/nvme0n1/*").expanduser().__str__()), desc="collect tweets for idf-dic")]
+if E.get("TEST"):
+    user_dirs = user_dirs[:100]
+
+with ProcessPoolExecutor(max_workers=psutil.cpu_count()) as exe:
+    tweets = set()
+    for _tweets in tqdm(exe.map(get_tweets_from_user_dir, user_dirs), total=len(user_dirs), desc="working..."):
+        tweets |= _tweets
+        if len(tweets) >= 100000000:
+            break
+
+a = np.array(list(tweets), dtype="U140")
+a = a[:len(a)//1000*1000].reshape((len(a)//1000, 1000))
+""" IDF(doc_freq)を作成 """
+
+def wakati(x):
+    doc_freq: Dict[str, int] = {}
+    for tweet in x:
         for term in set(parser.parse(tweet.lower()).strip().split()):
             if term not in doc_freq:
                 doc_freq[term] = 0
             doc_freq[term] += 1
     return doc_freq
 
-
-""" IDF(doc_freq)を作成 """
 doc_freq: Dict[str, int] = {}
-user_dirs = [sub_dir for sub_dir in tqdm(glob.glob(Path("~/.mnt/nfs/favs01/*").expanduser().__str__()), desc="collect tweets for idf-dic")]
-if E.get("TEST"):
-    user_dirs = user_dirs[:1000000]
+with ProcessPoolExecutor(max_workers=16) as exe:
+    for _doc_freq in tqdm(exe.map(wakati, a), total=len(a), desc="wakati..."):
+        for d, f in _doc_freq.items():
+            if d not in doc_freq:
+                doc_freq[d] = 0
+            doc_freq[d] += f
 
-with ProcessPoolExecutor(max_workers=psutil.cpu_count()) as exe:
-    for sub_doc_freq in tqdm(exe.map(get_tweets_from_user_dir, user_dirs), total=len(user_dirs), desc="working..."):
-        for term, freq in sub_doc_freq.items():
-            if term not in doc_freq:
-                doc_freq[term] = 0
-            doc_freq[term] += freq
 
+def is_legal(x):
+    # ok, e.g. akb48
+    if re.search("^[a-z]{1,}[0-9]{1,}$", x):
+        return x
+
+    # filter english
+    if re.search("^[a-z0-9!?]{1,}$", x):
+        return None
+
+    # check japanese
+    if regex.search("^[\p{Hiragana}\p{Katakana}\p{Han}]{1,}$", x):
+        return x
+
+    return None
 
 df = pd.DataFrame({"term": list(doc_freq.keys()), "freq": list(doc_freq.values())})
+df["term"] = df["term"].astype(str).apply(is_legal)
+df = df[pd.notnull(df["term"])]
+
 df.sort_values(by=["freq"], ascending=False, inplace=True)
 """ 95%上位以上を採用 """
 min_freq = df.iloc[int(len(df)*0.95)].freq
